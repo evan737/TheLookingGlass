@@ -3,34 +3,46 @@ from datetime import datetime
 
 from kalshi import get_markets
 from scanner import categorize_market
-from strategy import calculate_basic_edge
+from strategy import analyze_market
+from paper_trader import log_paper_trade
 
 
-SCAN_INTERVAL_SECONDS = 300  # 5 minutes
+SCAN_INTERVAL_SECONDS = 300
 
 
 def scan_once():
-    print("\n" + "=" * 60)
-    print(f"Kalshi Auto Scanner - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60)
+    print("\n" + "=" * 70)
+    print(f"The Looking Glass - Auto Scanner")
+    print(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    print("=" * 70)
 
     markets = get_markets(limit=100)
+
+    opportunities = 0
 
     for market in markets:
         title = market.get("title", "")
         category = categorize_market(title)
-        edge_note = calculate_basic_edge(market)
+        analysis = analyze_market(market, category)
 
-        print(f"[{category}] {title}")
-        print(f"Ticker: {market.get('ticker')}")
-        print(f"YES bid: {market.get('yes_bid')}¢")
-        print(f"YES ask: {market.get('yes_ask')}¢")
-        print(f"Market quality: {edge_note}")
-        print("-" * 60)
+        decision = analysis["decision"]
+        reason = analysis["reason"]
+
+        if decision == "WATCH":
+            opportunities += 1
+            log_paper_trade(market, category, decision, reason)
+
+            print(f"[{category}] {title}")
+            print(f"Ticker: {market.get('ticker')}")
+            print(f"Decision: {decision}")
+            print(f"Reason: {reason}")
+            print("-" * 70)
+
+    print(f"Scan complete. Opportunities logged: {opportunities}")
 
 
 def main():
-    print("Automated Kalshi scanner started.")
+    print("The Looking Glass automated paper scanner started.")
     print("Press CTRL + C to stop.")
 
     while True:

@@ -1,19 +1,42 @@
-def calculate_basic_edge(market):
-    yes_bid = market.get("yes_bid")
-    yes_ask = market.get("yes_ask")
-    last_price = market.get("last_price")
+def dollars_to_cents(value):
+    if value is None:
+        return None
+    return float(value) * 100
+
+
+def analyze_market(market, category):
+    yes_bid = dollars_to_cents(market.get("yes_bid_dollars"))
+    yes_ask = dollars_to_cents(market.get("yes_ask_dollars"))
+    last_price = dollars_to_cents(market.get("last_price_dollars"))
+    volume = float(market.get("volume_fp") or 0)
+
+    if yes_bid == 0 and yes_ask == 0 and last_price == 0:
+        return {
+            "decision": "SKIP",
+            "reason": "No active pricing",
+        }
+
+    if volume < 100:
+        return {
+            "decision": "SKIP",
+            "reason": "Low volume",
+        }
 
     if yes_bid is not None and yes_ask is not None:
         spread = yes_ask - yes_bid
 
-        if spread <= 3:
-            return "Tight market"
-        if spread <= 8:
-            return "Medium spread"
+        if spread > 10:
+            return {
+                "decision": "SKIP",
+                "reason": f"Spread too wide: {spread:.1f}¢",
+            }
 
-        return "Wide spread"
+        return {
+            "decision": "WATCH",
+            "reason": f"Tradable spread: {spread:.1f}¢",
+        }
 
-    if last_price is not None:
-        return f"No bid/ask, last traded at {last_price}¢"
-
-    return "No pricing data"
+    return {
+        "decision": "WATCH",
+        "reason": "Has pricing data",
+    }
