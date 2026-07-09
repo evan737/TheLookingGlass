@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from pathlib import Path
 
 from database import initialize_database, get_recent_scans_as_dicts
 from opportunity_engine import build_opportunities
@@ -214,3 +215,32 @@ with right:
         )
     else:
         st.caption("Forecast will appear once opportunities are found.")
+    st.divider()
+
+st.subheader("📝 Paper Trades")
+
+trade_log_path = Path("paper_trades.csv")
+
+if not trade_log_path.exists():
+    st.info("No paper trades logged yet. Run paper_trade_scan.py to generate some.")
+else:
+    trades_df = pd.read_csv(trade_log_path)
+    trades_df["timestamp"] = pd.to_datetime(trades_df["timestamp"])
+    trades_df = trades_df.sort_values("timestamp", ascending=False)
+
+    buy_yes_count = len(trades_df[trades_df["decision"] == "BUY YES"])
+    buy_no_count = len(trades_df[trades_df["decision"] == "BUY NO"])
+
+    tcol1, tcol2, tcol3 = st.columns(3)
+    tcol1.metric("Total Paper Trades", len(trades_df))
+    tcol2.metric("BUY YES calls", buy_yes_count)
+    tcol3.metric("BUY NO calls", buy_no_count)
+
+    st.dataframe(
+        trades_df[[
+            "timestamp", "category", "ticker", "title",
+            "decision", "yes_bid", "yes_ask", "last_price", "reason",
+        ]],
+        use_container_width=True,
+        height=400,
+    )

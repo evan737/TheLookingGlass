@@ -102,7 +102,11 @@ def build_opportunities(markets):
             "forecast_mean_f": round(forecast["forecast_mean"], 1),
             "forecast_std_f": round(forecast["forecast_std"], 2),
             "volume": market.get("volume_fp"),
+            "yes_bid_dollars": market.get("yes_bid_dollars"),
+            "yes_ask_dollars": market.get("yes_ask_dollars"),
+            "last_price_dollars": market.get("last_price_dollars"),
         })
+        
 
     opportunities.sort(key=lambda o: abs(o["edge_pct"]), reverse=True)
     return opportunities
