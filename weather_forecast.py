@@ -1,31 +1,29 @@
 import requests
 from statistics import mean, pstdev
 
-# Kalshi's KXHIGHNY series settles on the NWS Central Park station (KNYC),
-# NOT wherever weather.py was pointed before. Use the station's coordinates.
-STATION_LAT = 40.7829
-STATION_LON = -73.9654
-
 # Three independent forecast models. Using the *spread between models* as our
 # uncertainty estimate is far more honest than a made-up fixed number -- if
 # the models agree, we're confident; if they disagree, we should be too.
 MODELS = ["ecmwf_ifs025", "gfs_seamless", "icon_seamless"]
 
 
-def get_nyc_high_forecast(forecast_days=10):
+def get_high_forecast(lat, lon, timezone="America/New_York", forecast_days=10):
     """
     Returns a dict keyed by date string ('YYYY-MM-DD') with:
       - forecast_mean: average daily high (F) across models
       - forecast_std: population stddev across models (uncertainty proxy)
       - model_values: the raw per-model forecasts, for transparency
+
+    lat/lon should be the station Kalshi actually settles against, not just
+    "the city" loosely -- see stations.py for the mapping and its caveats.
     """
     url = (
         "https://api.open-meteo.com/v1/forecast"
-        f"?latitude={STATION_LAT}&longitude={STATION_LON}"
+        f"?latitude={lat}&longitude={lon}"
         "&daily=temperature_2m_max"
         f"&models={','.join(MODELS)}"
         "&temperature_unit=fahrenheit"
-        "&timezone=America/New_York"
+        f"&timezone={timezone}"
         f"&forecast_days={forecast_days}"
     )
     response = requests.get(url, timeout=20)
@@ -63,11 +61,14 @@ def get_nyc_high_forecast(forecast_days=10):
 
 
 if __name__ == "__main__":
-    forecasts = get_nyc_high_forecast()
-    for date, forecast in forecasts.items():
-        print(
-            date,
-            "mean:", round(forecast["forecast_mean"], 1),
-            "std:", round(forecast["forecast_std"], 2),
-            "models:", forecast["model_values"],
-        )
+    from stations import WEATHER_STATIONS
+
+    for series_ticker, station in WEATHER_STATIONS.items():
+        print(f"--- {station['name']} ({series_ticker}) ---")
+        forecasts = get_high_forecast(station["lat"], station["lon"])
+        for date, forecast in list(forecasts.items())[:3]:
+            print(
+                date,
+                "mean:", round(forecast["forecast_mean"], 1),
+                "std:", round(forecast["forecast_std"], 2),
+            )

@@ -1,7 +1,8 @@
 import re
 
 from probability_model import bracket_probability
-from weather_forecast import get_nyc_high_forecast
+from weather_forecast import get_high_forecast
+from stations import WEATHER_STATIONS
 
 MONTH_MAP = {
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
@@ -41,17 +42,27 @@ def market_implied_probability(market):
 
 def build_opportunities(markets):
     """
-    Currently only models the KXHIGHNY (NYC High Temp) series -- that's the
-    only series in market_registry.py with a matching weather model. Other
-    categories (Economics, Crypto, Politics, Sports) will just be skipped
-    until they get their own probability models.
+    Models any series listed in stations.py (currently the KXHIGH weather
+    series). Markets from other categories -- Economics, Crypto, Politics,
+    Sports -- are skipped until they get their own probability models.
+
+    Forecasts are fetched once per city (not once per market) since a city
+    can have many open bracket markets sharing the same underlying forecast.
     """
-    forecasts = get_nyc_high_forecast()
     opportunities = []
+    forecast_cache = {}
 
     for market in markets:
-        if market.get("series_ticker") != "KXHIGHNY":
+        series_ticker = market.get("series_ticker")
+        station = WEATHER_STATIONS.get(series_ticker)
+        if not station:
             continue
+
+        if series_ticker not in forecast_cache:
+            forecast_cache[series_ticker] = get_high_forecast(
+                station["lat"], station["lon"]
+            )
+        forecasts = forecast_cache[series_ticker]
 
         target_date = parse_event_date(market.get("event_ticker"))
         forecast = forecasts.get(target_date)
@@ -78,9 +89,11 @@ def build_opportunities(markets):
         confidence = round((1 - spread_penalty) * 100, 1)
 
         opportunities.append({
+            "city": station["name"],
+            "series_ticker": series_ticker,
             "ticker": market.get("ticker"),
             "title": market.get("title"),
-            "bracket": market.get("bracket_label"),
+            "bracket": market.get("yes_sub_title"),
             "target_date": target_date,
             "market_prob_pct": round(market_prob * 100, 1),
             "model_prob_pct": round(model_prob * 100, 1),

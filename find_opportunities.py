@@ -8,17 +8,17 @@ def main():
     markets = get_registered_markets(MARKET_SERIES)
     print(f"Loaded {len(markets)} registered markets")
 
-    print("Fetching NYC forecast and computing opportunities...")
+    print("Fetching forecasts and computing opportunities...")
     opportunities = build_opportunities(markets)
 
     if not opportunities:
-        print("No opportunities found. Either no KXHIGHNY markets are open "
-              "right now, or their event dates fall outside the 10-day "
-              "forecast window.")
+        print("No opportunities found. Either no registered weather markets "
+              "are open right now, or their event dates fall outside the "
+              "10-day forecast window.")
         return
 
     header = (
-        f"{'Bracket':<16}{'Date':<12}{'Market %':<10}"
+        f"{'City':<14}{'Bracket':<14}{'Date':<12}{'Market %':<10}"
         f"{'Model %':<10}{'Edge %':<9}{'Confidence':<12}{'Volume'}"
     )
     print()
@@ -26,7 +26,8 @@ def main():
     print("-" * len(header))
     for opp in opportunities:
         print(
-            f"{(opp['bracket'] or '')[:15]:<16}"
+            f"{opp['city']:<14}"
+            f"{(opp['bracket'] or '')[:13]:<14}"
             f"{(opp['target_date'] or ''):<12}"
             f"{opp['market_prob_pct']:<10}"
             f"{opp['model_prob_pct']:<10}"
