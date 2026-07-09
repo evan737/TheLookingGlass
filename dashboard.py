@@ -244,3 +244,30 @@ else:
         use_container_width=True,
         height=400,
     )
+st.divider()
+
+st.subheader("Bankroll")
+
+STARTING_BANKROLL = 1000.0
+results_path = Path("paper_trade_results.csv")
+
+if not results_path.exists():
+    st.info(f"No settled trades yet. Bankroll: ${STARTING_BANKROLL:,.2f} (starting, unchanged)")
+else:
+    results_df = pd.read_csv(results_path)
+    total_profit = results_df["profit"].sum()
+    wins = int(results_df["won"].astype(str).str.strip().eq("True").sum())
+    losses = len(results_df) - wins
+    current_bankroll = STARTING_BANKROLL + total_profit
+
+    bcol1, bcol2, bcol3, bcol4 = st.columns(4)
+    bcol1.metric("Bankroll", f"${current_bankroll:,.2f}", f"{total_profit:+,.2f}")
+    bcol2.metric("Settled Trades", len(results_df))
+    bcol3.metric("Wins", wins)
+    bcol4.metric("Losses", losses)
+
+    st.dataframe(
+        results_df.sort_values("ticker", ascending=False),
+        use_container_width=True,
+        height=300,
+    )

@@ -58,3 +58,9 @@ if __name__ == "__main__":
         print("YES bid:", market.get("yes_bid_dollars"))
         print("YES ask:", market.get("yes_ask_dollars"))
         print("-" * 60)
+
+def get_market(ticker):
+    url = f"{BASE_URL}/markets/{ticker}"
+    response = requests.get(url, timeout=20)
+    response.raise_for_status()
+    return response.json().get("market", {})
