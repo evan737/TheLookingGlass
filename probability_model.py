@@ -33,3 +33,45 @@ def bracket_probability(floor_strike, cap_strike, forecast_mean, forecast_std):
         return max(0.0, min(1.0, normal_cdf(cap_strike, forecast_mean, forecast_std)))
 
     return None
+
+
+def bracket_probability_with_floor(floor_strike, cap_strike, forecast_mean, forecast_std, observed_max_so_far=None):
+    """
+    Same as bracket_probability, but incorporates a same-day observed
+    running maximum temperature as a hard floor: the day's final high can
+    never be lower than what's already been recorded, so we condition the
+    forecast distribution on "true high >= observed_max_so_far" (a
+    left-truncated normal). This sharpens the estimate as the day goes on.
+
+    If observed_max_so_far is None, behaves identically to
+    bracket_probability -- this is meant to be used only once a station
+    has same-day observations, not for future-day markets.
+
+    Note: being "in the bracket already" doesn't guarantee a high
+    probability -- if forecast_std is wide relative to the bracket width,
+    the day's true high can still climb past the bracket before the
+    day is over. This is expected, correct behavior, not a bug.
+    """
+    if observed_max_so_far is None:
+        return bracket_probability(floor_strike, cap_strike, forecast_mean, forecast_std)
+
+    p_below_observed = normal_cdf(observed_max_so_far, forecast_mean, forecast_std)
+    denominator = 1 - p_below_observed
+
+    if denominator <= 1e-9:
+        if cap_strike is not None and observed_max_so_far > cap_strike:
+            return 0.0
+        if floor_strike is not None and observed_max_so_far < floor_strike:
+            return 0.0
+        return 1.0
+
+    effective_floor = max(floor_strike, observed_max_so_far) if floor_strike is not None else observed_max_so_far
+
+    if cap_strike is not None and effective_floor > cap_strike:
+        return 0.0
+
+    p_below_cap = normal_cdf(cap_strike, forecast_mean, forecast_std) if cap_strike is not None else 1.0
+    p_below_effective_floor = normal_cdf(effective_floor, forecast_mean, forecast_std)
+
+    numerator = p_below_cap - p_below_effective_floor
+    return max(0.0, min(1.0, numerator / denominator))

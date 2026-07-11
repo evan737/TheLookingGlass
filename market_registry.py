@@ -10,4 +10,11 @@ MARKET_SERIES = {
         "Houston High Temperature": "KXHIGHHOU",
         "Philadelphia High Temperature": "KXHIGHPHIL",
     },
+    "Tennis": {
+        "ATP Match Winner": "KXATPMATCH",
+        "WTA Match Winner": "KXWTAMATCH",
+    },
+    "Economics": {
+        "Weekly Jobless Claims": "KXJOBLESSCLAIMS",
+    }
 }

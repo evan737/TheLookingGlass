@@ -1,5 +1,6 @@
 import csv
 from pathlib import Path
+from datetime import datetime, timezone
 
 from kalshi import get_market
 
@@ -88,6 +89,7 @@ def settle_trades():
             "result": result,
             "won": won,
             "profit": profit,
+            "settled_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         })
 
         outcome = "WIN" if won else "LOSS"
@@ -99,7 +101,7 @@ def settle_trades():
 
     file_exists = RESULTS_LOG.exists()
     with RESULTS_LOG.open("a", newline="", encoding="utf-8") as file:
-        fieldnames = ["ticker", "decision", "entry_price", "result", "won", "profit"]
+        fieldnames = ["ticker", "decision", "entry_price", "result", "won", "profit", "settled_at"]
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         if not file_exists:
             writer.writeheader()

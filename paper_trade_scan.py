@@ -2,6 +2,9 @@ from kalshi import get_registered_markets
 from market_registry import MARKET_SERIES
 from opportunity_engine import build_opportunities
 from paper_trader import log_paper_trade, has_open_paper_trade
+from position_sizing import position_size
+from bankroll import get_current_bankroll
+from risk_manager import check_can_trade
 
 # How big an edge has to be, and how much we trust the forecast behind it,
 # before we bother paper-trading it at all. These are starting points, not
@@ -13,9 +16,7 @@ CONFIDENCE_THRESHOLD_PCT = 40.0
 def decide(opp):
     """
     Returns (decision, reason). decision is one of "BUY YES", "BUY NO",
-    or "SKIP". This is intentionally simple -- a real sizing/risk model
-    (Kelly criterion, position caps, etc.) would go here later once
-    there's enough logged history to know if the edge signal is any good.
+    or "SKIP".
     """
     if opp["confidence"] < CONFIDENCE_THRESHOLD_PCT:
         return "SKIP", f"Confidence too low ({opp['confidence']}%)"
@@ -56,6 +57,11 @@ def main():
             print(f"Already paper-traded {opp['ticker']}, skipping duplicate.")
             continue
 
+        can_trade, risk_reason = check_can_trade("Weather", ticker=opp["ticker"])
+        if not can_trade:
+            print(f"[BLOCKED] {opp['city']} {opp['bracket']} -- {risk_reason}")
+            continue
+
         market_like = {
             "ticker": opp["ticker"],
             "title": opp["title"],
@@ -64,17 +70,34 @@ def main():
             "last_price_dollars": opp["last_price_dollars"],
         }
 
+        # Kelly sizing: use the model's stated probability and the price
+        # of the side we're actually buying.
+        price = float(opp["yes_ask_dollars"]) if decision == "BUY YES" else (1 - float(opp["yes_bid_dollars"]))
+        win_prob = (opp["model_prob_pct"] / 100) if decision == "BUY YES" else (1 - opp["model_prob_pct"] / 100)
+        stake = position_size(get_current_bankroll(), win_prob, price)
+
+        if stake <= 0:
+            print(f"[SKIP] {opp['city']} {opp['bracket']} -- Kelly sizing suggests no bet")
+            continue
+
         log_paper_trade(
             market=market_like,
             category="Weather",
             decision=decision,
             reason=reason,
+            stake=stake,
+            features={
+                "model_prob_pct": opp["model_prob_pct"],
+                "market_prob_pct": opp["market_prob_pct"],
+                "edge_pct": opp["edge_pct"],
+                "confidence_pct": opp["confidence"],
+            },
         )
         acted_on += 1
-        print(f"[{decision}] {opp['city']} {opp['bracket']} ({opp['target_date']}) -- {reason}")
+        print(f"[{decision}] {opp['city']} {opp['bracket']} (${stake:.2f}) -- {reason}")
 
     if acted_on == 0:
-        print("No new paper trades this run (nothing cleared the edge/confidence bar).")
+        print("No new paper trades this run (nothing cleared the edge/confidence bar, or risk limits blocked it).")
     else:
         print(f"\nLogged {acted_on} new paper trade(s) to paper_trades.csv")
 

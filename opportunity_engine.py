@@ -1,8 +1,10 @@
 import re
+from datetime import datetime, timezone
 
-from probability_model import bracket_probability
+from probability_model import bracket_probability, bracket_probability_with_floor
 from weather_forecast import get_high_forecast
 from stations import WEATHER_STATIONS
+from nws_observations import fetch_todays_max_temp_f
 
 MONTH_MAP = {
     "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
@@ -48,9 +50,18 @@ def build_opportunities(markets):
 
     Forecasts are fetched once per city (not once per market) since a city
     can have many open bracket markets sharing the same underlying forecast.
+
+    For markets whose target date is TODAY, this also pulls the actual
+    same-day observed running max temperature from the NWS station itself
+    and conditions the forecast on "the true high is at least this much"
+    -- sharpening the estimate as the day progresses. Future-day markets
+    just use the raw forecast, since there's no same-day observation yet.
     """
     opportunities = []
     forecast_cache = {}
+    observed_max_cache = {}
+
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     for market in markets:
         series_ticker = market.get("series_ticker")
@@ -69,11 +80,18 @@ def build_opportunities(markets):
         if not forecast:
             continue  # market's event date is outside our forecast window
 
-        model_prob = bracket_probability(
+        observed_max_so_far = None
+        if target_date == today_str and station.get("station_id"):
+            if series_ticker not in observed_max_cache:
+                observed_max_cache[series_ticker] = fetch_todays_max_temp_f(station["station_id"])
+            observed_max_so_far = observed_max_cache[series_ticker]
+
+        model_prob = bracket_probability_with_floor(
             market.get("floor_strike"),
             market.get("cap_strike"),
             forecast["forecast_mean"],
             forecast["forecast_std"],
+            observed_max_so_far=observed_max_so_far,
         )
         market_prob = market_implied_probability(market)
 
@@ -101,12 +119,12 @@ def build_opportunities(markets):
             "confidence": confidence,
             "forecast_mean_f": round(forecast["forecast_mean"], 1),
             "forecast_std_f": round(forecast["forecast_std"], 2),
+            "observed_max_so_far_f": round(observed_max_so_far, 1) if observed_max_so_far is not None else None,
             "volume": market.get("volume_fp"),
             "yes_bid_dollars": market.get("yes_bid_dollars"),
             "yes_ask_dollars": market.get("yes_ask_dollars"),
             "last_price_dollars": market.get("last_price_dollars"),
         })
-        
 
     opportunities.sort(key=lambda o: abs(o["edge_pct"]), reverse=True)
     return opportunities
