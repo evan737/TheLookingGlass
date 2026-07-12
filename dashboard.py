@@ -99,7 +99,7 @@ def load_bankroll_status():
 
 @st.cache_data(ttl=10)
 def load_category_exposures():
-    return {cat: category_exposure_pct(cat) for cat in ["Weather", "Economics", "Tennis"]}
+   return {cat: category_exposure_pct(cat) for cat in ["Weather", "Economics", "Tennis", "Futures"]}
 
 @st.cache_data(ttl=10)
 def load_correlation_exposures():
@@ -397,10 +397,7 @@ odds_api_key = st.secrets.get("ODDS_API_KEY", "") or st.sidebar.text_input(
 
 st.sidebar.divider()
 st.sidebar.header("Economics")
-fred_api_key = st.secrets.get("FRED_API_KEY", "") or st.sidebar.text_input(
-    "FRED API key", type="password",
-    help="From fred.stlouisfed.org. Jobless claims data is cached 1 hour."
-)
+fred_api_key = st.sidebar.text_input("FRED API key", type="password", help="From fred.stlouisfed.org. Jobless claims data is cached 1 hour.")
 
 if auto_refresh:
     st.markdown(
@@ -459,8 +456,7 @@ with tab_weather:
                 "YES Bid ¢", "YES Ask ¢", "Last Price ¢", "Spread ¢", "Status",
             ]
 
-            st.dataframe(filtered[display_cols], use_container_width=True, height=620)
-
+            st.dataframe(filtered[display_cols], width='stretch', height=620)
         with right:
             st.subheader("Top Opportunities")
 
@@ -619,7 +615,7 @@ with tab_trades:
                 "timestamp", "category", "ticker", "title",
                 "decision", "yes_bid", "yes_ask", "last_price", "reason",
             ]],
-            use_container_width=True,
+            width='stretch',
             height=400,
         )
 
@@ -671,13 +667,13 @@ with tab_bankroll:
                     xaxis=dict(showgrid=False, color="#7A8290"),
                     yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.06)", color="#7A8290", tickprefix="$"),
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
         else:
             st.caption("Bankroll trend chart will appear once settle_trades.py starts recording settlement timestamps.")
 
         st.dataframe(
             results_df.sort_values("ticker", ascending=False),
-            use_container_width=True,
+            width='stretch',
             height=300,
         )
 
