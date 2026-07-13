@@ -55,6 +55,31 @@ def bracket_probability_with_floor(floor_strike, cap_strike, forecast_mean, fore
     if observed_max_so_far is None:
         return bracket_probability(floor_strike, cap_strike, forecast_mean, forecast_std)
 
+    # If the observed temperature is running notably BELOW the forecast
+    # mean, that's a signal the forecast itself is likely busting (e.g.
+    # persistent marine layer keeping LA cooler than 3 models expected) --
+    # not just something the floor/truncation math should quietly absorb.
+    # Simply truncating a wrong, overconfident distribution at the
+    # observed floor barely helps if the mean itself is still far too
+    # high (confirmed empirically: even widening std alone left model
+    # probability near 87% against a market pricing ~28%). So when this
+    # happens, blend the forecast mean toward the observation and widen
+    # uncertainty accordingly.
+    #
+    # HONEST LIMITATION: blend_weight is a fixed heuristic (0.6), not
+    # time-of-day aware. Late in the day, the observed max-so-far is
+    # usually very close to the final value (little room left to rise);
+    # early in the day, there's much more legitimate room for the actual
+    # high to still climb toward the forecast. A more correct version
+    # would scale blend_weight by how far past typical peak-heating hours
+    # the station currently is. This is a reasonable first correction,
+    # not a fully solved problem.
+    if observed_max_so_far < forecast_mean:
+        gap = forecast_mean - observed_max_so_far
+        blend_weight = 0.6
+        forecast_mean = (1 - blend_weight) * forecast_mean + blend_weight * observed_max_so_far
+        forecast_std = forecast_std + 0.3 * gap
+
     p_below_observed = normal_cdf(observed_max_so_far, forecast_mean, forecast_std)
     denominator = 1 - p_below_observed
 
