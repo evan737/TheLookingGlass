@@ -100,6 +100,14 @@ def build_opportunities(markets):
 
         edge = model_prob - market_prob
 
+        volume = market.get("volume_fp") or 0
+        try:
+            volume = float(volume)
+        except (TypeError, ValueError):
+            volume = 0.0
+        if volume <= 0:
+            continue  # skip untouched brackets -- a stale/default price with no real trading isn't a real edge
+
         # Crude confidence proxy: tighter model agreement -> higher confidence.
         # This is a heuristic, not a calibrated statistic -- treat it as a
         # sort-order hint, not a guarantee.
@@ -120,7 +128,7 @@ def build_opportunities(markets):
             "forecast_mean_f": round(forecast["forecast_mean"], 1),
             "forecast_std_f": round(forecast["forecast_std"], 2),
             "observed_max_so_far_f": round(observed_max_so_far, 1) if observed_max_so_far is not None else None,
-            "volume": market.get("volume_fp"),
+            "volume": volume,
             "yes_bid_dollars": market.get("yes_bid_dollars"),
             "yes_ask_dollars": market.get("yes_ask_dollars"),
             "last_price_dollars": market.get("last_price_dollars"),
