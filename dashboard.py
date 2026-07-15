@@ -397,7 +397,10 @@ odds_api_key = st.secrets.get("ODDS_API_KEY", "") or st.sidebar.text_input(
 
 st.sidebar.divider()
 st.sidebar.header("Economics")
-fred_api_key = st.sidebar.text_input("FRED API key", type="password", help="From fred.stlouisfed.org. Jobless claims data is cached 1 hour.")
+fred_api_key = st.secrets.get("FRED_API_KEY", "") or st.sidebar.text_input(
+    "FRED API key", type="password",
+    help="From fred.stlouisfed.org. Jobless claims data is cached 1 hour."
+)
 
 if auto_refresh:
     st.markdown(
