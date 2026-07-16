@@ -106,12 +106,25 @@ def settle_trades():
             # Kalshi doesn't give us the NO-side ask directly in our log --
             # approximate it from the YES bid (no_ask =~ 1 - yes_bid).
             # This is an approximation, not the exact fill price.
-            entry_price = (1 - yes_bid) if yes_bid is not None else None
+            if yes_bid is not None:
+                entry_price = 1 - yes_bid
+            elif yes_ask is not None:
+                # No resting YES bid was ever recorded (illiquid market at
+                # trade time, e.g. a thin qualifying-round tennis match) --
+                # fall back to approximating from the YES ask instead.
+                # Less precise (ignores the bid/ask spread), but keeps the
+                # trade from sitting open forever with no result just
+                # because one field was missing.
+                entry_price = 1 - yes_ask
+            else:
+                entry_price = None
             won = (result == "no")
         else:
             continue
 
         if not entry_price or entry_price <= 0:
+            print(f"{ticker}: settled ({result}) but no usable price data to compute P&L "
+                  f"(yes_bid={trade.get('yes_bid')!r}, yes_ask={trade.get('yes_ask')!r}) -- skipping, needs manual review")
             continue
 
         contracts = stake / entry_price
