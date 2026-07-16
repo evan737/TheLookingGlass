@@ -702,8 +702,30 @@ with tab_bankroll:
         else:
             st.caption("Bankroll trend chart will appear once settle_trades.py starts recording settlement timestamps.")
 
+        # Pull in title/category from paper_trades.csv so this table shows
+        # what the trade actually was, not just a bare ticker -- the
+        # settlement log alone doesn't carry that context.
+        settled_display = results_df.copy()
+        trades_lookup_df = load_trades_df()
+        if trades_lookup_df is not None:
+            trade_info = (
+                trades_lookup_df[["ticker", "category", "title"]]
+                .drop_duplicates(subset="ticker", keep="last")
+            )
+            settled_display = settled_display.merge(trade_info, on="ticker", how="left")
+
+        if "settled_at" in settled_display.columns:
+            settled_display = settled_display.sort_values("settled_at", ascending=False)
+        else:
+            settled_display = settled_display.sort_values("ticker", ascending=False)
+
+        display_cols = [c for c in [
+            "settled_at", "category", "title", "ticker", "decision",
+            "result", "won", "profit", "fee", "entry_price",
+        ] if c in settled_display.columns]
+
         st.dataframe(
-            results_df.sort_values("ticker", ascending=False),
+            settled_display[display_cols],
             width='stretch',
             height=300,
         )
