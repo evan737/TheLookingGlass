@@ -605,44 +605,31 @@ with tab_trades:
     if trades_df is None:
         st.info("No paper trades logged yet. Run paper_trade_scan.py to generate some.")
     else:
-        # Attach each trade's outcome (Open / Win / Loss) by matching against
-        # paper_trade_results.csv -- so it's obvious at a glance which
-        # "opportunities" actually made it through to a settled result
-        # versus one still waiting, without cross-referencing two tabs.
-        # Voided trades (walkover/canceled markets, refunded as a wash) are
-        # dropped entirely here -- they never really happened, so they
-        # shouldn't clutter the trade log.
+        # This tab is "open positions" only -- anything settled (win, loss,
+        # or void) has a final outcome and belongs in the Bankroll tab
+        # instead, so it doesn't pile up here forever.
         results_df = load_results_df()
-        status_map = {}
-        void_tickers = set()
+        settled_tickers = set()
         if results_df is not None:
-            for _, row in results_df.iterrows():
-                if row.get("result") == "void":
-                    void_tickers.add(row["ticker"])
-                elif str(row.get("won")).strip() == "True":
-                    status_map[row["ticker"]] = "🟢 Win"
-                elif str(row.get("won")).strip() == "False":
-                    status_map[row["ticker"]] = "🔴 Loss"
+            settled_tickers = set(results_df["ticker"])
 
-        trades_df = trades_df[~trades_df["ticker"].isin(void_tickers)].copy()
-        trades_df["status"] = trades_df["ticker"].map(status_map).fillna("🟡 Open")
+        settled_count = len(trades_df[trades_df["ticker"].isin(settled_tickers)])
+        trades_df = trades_df[~trades_df["ticker"].isin(settled_tickers)].copy()
 
         buy_yes_count = len(trades_df[trades_df["decision"] == "BUY YES"])
         buy_no_count = len(trades_df[trades_df["decision"] == "BUY NO"])
-        open_count = int((trades_df["status"] == "🟡 Open").sum())
 
-        tcol1, tcol2, tcol3, tcol4 = st.columns(4)
-        tcol1.metric("Total Paper Trades", len(trades_df))
+        tcol1, tcol2, tcol3 = st.columns(3)
+        tcol1.metric("Open Paper Trades", len(trades_df))
         tcol2.metric("BUY YES calls", buy_yes_count)
         tcol3.metric("BUY NO calls", buy_no_count)
-        tcol4.metric("Still Open", open_count)
-        if void_tickers:
-            st.caption(f"{len(void_tickers)} voided trade(s) hidden -- market closed with no result (walkover/canceled), stake refunded.")
+        if settled_count:
+            st.caption(f"{settled_count} settled trade(s) moved to the Bankroll tab.")
 
         st.dataframe(
             trades_df[[
                 "timestamp", "category", "ticker", "title",
-                "decision", "status", "yes_bid", "yes_ask", "last_price", "reason",
+                "decision", "yes_bid", "yes_ask", "last_price", "reason",
             ]],
             width='stretch',
             height=400,
