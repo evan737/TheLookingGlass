@@ -56,6 +56,9 @@ def analyze():
 
     records = []
     for result_row in results:
+        if result_row.get("result") == "void":
+            continue  # refunded wash, not a real win/loss signal -- exclude from calibration
+
         ticker = result_row["ticker"]
         trade_row = trades.get(ticker)
         if not trade_row:
