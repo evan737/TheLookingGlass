@@ -123,6 +123,27 @@ def load_results_df():
     return pd.read_csv(results_path)
 
 
+def infer_category_from_ticker(ticker):
+    """
+    Fallback category inference from the ticker prefix. Needed because
+    some settled trades are old enough that their ticker no longer
+    appears in the current paper_trades.csv (it's been rotated into
+    paper_trades_old.csv), so a straight join against the trade log
+    misses them and they'd otherwise show up as "Unknown".
+    """
+    if not isinstance(ticker, str):
+        return "Unknown"
+    if ticker.startswith("KXHIGH"):
+        return "Weather"
+    if ticker.startswith("KXATPMATCH") or ticker.startswith("KXWTAMATCH"):
+        return "Tennis"
+    if ticker.startswith("KXATP-") or ticker.startswith("KXWTA-"):
+        return "Futures"
+    if ticker.startswith("KXJOBLESSCLAIMS"):
+        return "Economics"
+    return "Unknown"
+
+
 @st.cache_data(ttl=10)
 def load_data(limit):
     rows = get_recent_scans_as_dicts(limit)
@@ -656,6 +677,46 @@ with tab_bankroll:
         bcol3.metric("Wins", wins)
         bcol4.metric("Losses", losses)
         bcol5.metric("Voids", voids, help="Market closed with no yes/no result (walkover, retirement, etc.) -- stake refunded, not counted as a win or loss.")
+
+        # Performance by category -- the aggregate numbers above hide the
+        # fact that categories can behave very differently (e.g. one with
+        # a long track record vs. another with a handful of trades so
+        # far). Category is looked up from the trade log where possible,
+        # falling back to inferring it from the ticker prefix for older
+        # settled trades that have since rotated out of paper_trades.csv.
+        trades_lookup_df = load_trades_df()
+        category_lookup = {}
+        if trades_lookup_df is not None:
+            category_lookup = dict(zip(trades_lookup_df["ticker"], trades_lookup_df["category"]))
+
+        settled_only = results_df[results_df.get("result") != "void"].copy() if "result" in results_df.columns else results_df.copy()
+        if not settled_only.empty:
+            settled_only["category"] = settled_only["ticker"].map(category_lookup)
+            settled_only["category"] = settled_only.apply(
+                lambda r: r["category"] if pd.notna(r["category"]) else infer_category_from_ticker(r["ticker"]),
+                axis=1,
+            )
+            settled_only["won_bool"] = settled_only["won"].astype(str).str.strip().eq("True")
+
+            cat_summary = settled_only.groupby("category").agg(
+                Trades=("won_bool", "count"),
+                Wins=("won_bool", "sum"),
+                Profit=("profit", "sum"),
+            ).reset_index().rename(columns={"category": "Category"})
+            cat_summary["Win Rate"] = (cat_summary["Wins"] / cat_summary["Trades"] * 100).round(1)
+            cat_summary["Profit"] = cat_summary["Profit"].round(2)
+            cat_summary = cat_summary[["Category", "Trades", "Wins", "Win Rate", "Profit"]].sort_values("Profit", ascending=False)
+
+            st.caption("Performance by category (small sample sizes can swing win rate a lot -- check Trades before reading too much into it):")
+            st.dataframe(
+                cat_summary,
+                width='stretch',
+                hide_index=True,
+                column_config={
+                    "Win Rate": st.column_config.NumberColumn(format="%.1f%%"),
+                    "Profit": st.column_config.NumberColumn(format="$%.2f"),
+                },
+            )
 
         if "settled_at" in results_df.columns:
             chart_df = results_df.copy()
