@@ -4,6 +4,9 @@ from kalshi import get_registered_markets
 from market_registry import MARKET_SERIES
 from claims_opportunity_engine import build_claims_opportunities, CLAIMS_SERIES_TICKER
 from paper_trader import log_paper_trade, has_open_paper_trade
+from position_sizing import position_size
+from bankroll import get_current_bankroll
+from risk_manager import check_can_trade
 
 # Higher bar than the weather engine (5%) since this model is cruder --
 # a single trend-based estimate, not a genuine multi-source ensemble.
@@ -58,6 +61,11 @@ def main():
             print(f"Already paper-traded {opp['ticker']}, skipping duplicate.")
             continue
 
+        can_trade, risk_reason = check_can_trade("Economics", ticker=opp["ticker"])
+        if not can_trade:
+            print(f"[BLOCKED] {opp['bracket']} -- {risk_reason}")
+            continue
+
         market_like = {
             "ticker": opp["ticker"],
             "title": opp["title"],
@@ -66,11 +74,24 @@ def main():
             "last_price_dollars": opp["last_price_dollars"],
         }
 
+        # Kelly sizing: use the model's stated probability and the price
+        # of the side we're actually buying -- same approach as the
+        # weather/tennis/futures scanners, so Economics stakes scale with
+        # edge/confidence instead of always betting a flat $10.
+        price = float(opp["yes_ask_dollars"]) if decision == "BUY YES" else (1 - float(opp["yes_bid_dollars"]))
+        win_prob = (opp["model_prob_pct"] / 100) if decision == "BUY YES" else (1 - opp["model_prob_pct"] / 100)
+        stake = position_size(get_current_bankroll(), win_prob, price)
+
+        if stake <= 0:
+            print(f"[SKIP] {opp['bracket']} -- Kelly sizing suggests no bet")
+            continue
+
         log_paper_trade(
             market=market_like,
             category="Economics",
             decision=decision,
             reason=reason,
+            stake=stake,
             features={
                 "model_prob_pct": opp["model_prob_pct"],
                 "market_prob_pct": opp["market_prob_pct"],
@@ -78,7 +99,7 @@ def main():
             },
         )
         acted_on += 1
-        print(f"[{decision}] {opp['bracket']} -- {reason}")
+        print(f"[{decision}] {opp['bracket']} (${stake:.2f}) -- {reason}")
 
     if acted_on == 0:
         print("No new paper trades this run (nothing cleared the edge bar).")
