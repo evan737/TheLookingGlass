@@ -34,9 +34,22 @@ Write-Host "=== Settling trades ==="
 python settle_trades.py
 
 Write-Host "=== Pushing updated data to GitHub ==="
+# Pull first: if anything landed on GitHub since the last run (even
+# something unrelated, like a file added through the GitHub web UI),
+# a bare push here gets silently rejected -- git prints an error but
+# this script has no error-checking, so it would otherwise just move on
+# and quietly leave the commit stuck local-only. That happened for real
+# on 2026-07-18 when a .devcontainer file was added on GitHub: every run
+# since then failed to push without anyone noticing, and Streamlit Cloud
+# (which deploys from GitHub) kept serving days-old data as a result.
+git pull --no-edit
 git add paper_trades.csv paper_trade_results.csv
 git commit -m "Automated scan update: $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
-git push
+$pushOutput = git push 2>&1
+Write-Host $pushOutput
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "!!! GIT PUSH FAILED -- data is committed locally but NOT on GitHub/Streamlit. Check this log. !!!"
+}
 
 Write-Host "=== Daily run complete ==="
 
