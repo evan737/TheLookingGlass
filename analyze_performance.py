@@ -4,6 +4,7 @@ from pathlib import Path
 from statistics import mean
 
 TRADE_LOG = Path("paper_trades.csv")
+OLD_TRADE_LOG = Path("paper_trades_old.csv")
 RESULTS_LOG = Path("paper_trade_results.csv")
 
 
@@ -31,11 +32,51 @@ def extract_abs_edge_pct(reason):
     return abs(float(match.group(1)))
 
 
+def extract_confidence_pct(reason):
+    """
+    Pulls the weather engine's forecast-agreement heuristic out of the
+    reason string (e.g. "...confidence 89.1%"). Only weather trades
+    currently log this field -- other categories will just return None.
+    """
+    match = re.search(r"confidence ([\d.]+)%", reason or "")
+    if not match:
+        return None
+    return float(match.group(1))
+
+
+def bet_implied_win_prob_pct(decision, model_prob_pct):
+    """
+    model_prob_pct is always P(YES). The actual probability the model is
+    claiming for *this specific bet* depends on which side we took --
+    for a BUY NO, the model's implied confidence in winning is the
+    complement. This is what should actually be checked against reality:
+    a trade logged as "90% confidence" ought to win about 90% of the
+    time, regardless of which side of the market it was.
+    """
+    if decision == "BUY YES":
+        return model_prob_pct
+    if decision == "BUY NO":
+        return 100 - model_prob_pct
+    return None
+
+
 def load_trades():
-    if not TRADE_LOG.exists():
-        return {}
-    with TRADE_LOG.open("r", newline="", encoding="utf-8") as file:
-        return {row["ticker"]: row for row in csv.DictReader(file)}
+    """
+    Reads both the active trade log and paper_trades_old.csv (older
+    trades get rotated out of paper_trades.csv over time). Without the
+    old log, most settled trades have no matching row here and silently
+    drop out of the analysis entirely -- only ~13 of ~30+ settled trades
+    would ever get analyzed, which makes any calibration read on this
+    data close to meaningless.
+    """
+    trades = {}
+    for path in (OLD_TRADE_LOG, TRADE_LOG):
+        if not path.exists():
+            continue
+        with path.open("r", newline="", encoding="utf-8") as file:
+            for row in csv.DictReader(file):
+                trades[row["ticker"]] = row  # TRADE_LOG read second, wins on overlap
+    return trades
 
 
 def load_results():
@@ -73,14 +114,18 @@ def analyze():
         model_prob_yes = model_prob_pct / 100
         brier = (model_prob_yes - actual_yes) ** 2
 
+        decision = trade_row.get("decision")
+
         records.append({
             "ticker": ticker,
             "category": trade_row.get("category"),
-            "decision": trade_row.get("decision"),
+            "decision": decision,
             "brier": brier,
             "won": result_row["won"] == "True",
             "profit": float(result_row["profit"]),
             "abs_edge_pct": extract_abs_edge_pct(reason),
+            "bet_confidence_pct": bet_implied_win_prob_pct(decision, model_prob_pct),
+            "heuristic_confidence_pct": extract_confidence_pct(reason),
         })
 
     if not records:
@@ -120,6 +165,42 @@ def analyze():
             bucket_win_rate = mean(1.0 if r["won"] else 0.0 for r in bucket)
             label = f"{low}-{high}%" if high < 1000 else f"{low}%+"
             print(f"  Edge {label}: n={len(bucket)}, win rate={bucket_win_rate*100:.1f}%")
+
+    # Real calibration check: if the model says a bet has a 90% chance to
+    # win, it should win about 90% of the time -- not just "more often
+    # than a 50% bet." This uses the bet-level implied probability (the
+    # complement for BUY NO), so it applies across every category, not
+    # just weather.
+    calib_records = [r for r in records if r["bet_confidence_pct"] is not None]
+    if calib_records:
+        print("\nCalibration -- stated win probability vs. actual win rate:")
+        print("  (a well-calibrated model has these two columns roughly match)")
+        buckets = [(50, 60), (60, 70), (70, 80), (80, 90), (90, 101)]
+        for low, high in buckets:
+            bucket = [r for r in calib_records if low <= r["bet_confidence_pct"] < high]
+            if not bucket:
+                continue
+            bucket_win_rate = mean(1.0 if r["won"] else 0.0 for r in bucket)
+            avg_stated = mean(r["bet_confidence_pct"] for r in bucket)
+            gap = bucket_win_rate * 100 - avg_stated
+            label = f"{low}-{min(high, 100)}%"
+            print(f"  Stated {label}: n={len(bucket)}, avg stated={avg_stated:.1f}%, "
+                  f"actual win rate={bucket_win_rate*100:.1f}%  (gap {gap:+.1f} pts)")
+
+    # Separately, the weather engine's own "confidence" heuristic (based on
+    # forecast spread tightness, not the model probability itself) --
+    # worth checking on its own since it's a distinct, unvalidated proxy.
+    heuristic_records = [r for r in records if r["heuristic_confidence_pct"] is not None]
+    if heuristic_records:
+        print("\nWin rate by weather engine's spread-based confidence heuristic:")
+        buckets = [(0, 60), (60, 75), (75, 90), (90, 101)]
+        for low, high in buckets:
+            bucket = [r for r in heuristic_records if low <= r["heuristic_confidence_pct"] < high]
+            if not bucket:
+                continue
+            bucket_win_rate = mean(1.0 if r["won"] else 0.0 for r in bucket)
+            label = f"{low}-{min(high, 100)}%"
+            print(f"  Heuristic {label}: n={len(bucket)}, win rate={bucket_win_rate*100:.1f}%")
 
     print("\nReminder: with this few trades, none of these numbers are statistically "
           "reliable yet -- treat them as an early read, not a verdict. Dozens of "

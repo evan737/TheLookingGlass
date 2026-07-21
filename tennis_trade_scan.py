@@ -7,7 +7,7 @@ from tennis_elo import build_elo_ratings_from_files
 from tennis_utils import normalize_player_name
 from sportsbook_odds import fetch_atp_matches, fetch_wta_matches
 from paper_trader import log_paper_trade, has_open_paper_trade
-from position_sizing import position_size
+from position_sizing import position_size, calibrate_win_prob
 from bankroll import get_current_bankroll
 from risk_manager import check_can_trade
 
@@ -105,6 +105,7 @@ def main():
 
         price = opp["market_prob_pct"] / 100 if decision == "BUY YES" else (1 - opp["market_prob_pct"] / 100)
         win_prob = (opp["sportsbook_prob_pct"] / 100) if decision == "BUY YES" else (1 - opp["sportsbook_prob_pct"] / 100)
+        win_prob = calibrate_win_prob(win_prob)
         stake = position_size(get_current_bankroll(), win_prob, price)
 
         if stake <= 0:

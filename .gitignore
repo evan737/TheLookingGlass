@@ -3,3 +3,4 @@ __pycache__/
 .venv/
 *_backup.csv
 STOP_TRADING
+logs/

@@ -1,3 +1,35 @@
+CALIBRATION_SHRINK = 0.5  # 0 = trust the model's stated probability fully, 1 = always treat it as 50/50
+
+
+def calibrate_win_prob(win_prob):
+    """
+    Shrinks a model-stated win probability toward 50% before it's used for
+    Kelly sizing, to compensate for demonstrated overconfidence.
+
+    WHY: analyze_performance.py's calibration check (30 settled trades, as
+    of 2026-07-16) found that trades logged at 90-100% stated confidence
+    (n=14 -- nearly half of everything settled so far) actually won only
+    71.4% of the time, and 80-90% stated trades won 66.7% of the time.
+    Since Kelly sizing bets bigger the more confident the model claims to
+    be, that overconfidence was very likely inflating stake sizes exactly
+    where the model was most wrong -- e.g. the Philly weather trade: 90%
+    stated confidence, logged as a +76% edge, lost.
+
+    HONEST LIMITATION: 0.5 (shrink the distance from 50% by half) is a
+    deliberately round, conservative starting point chosen to roughly
+    match the two largest calibration buckets (which independently
+    implied shrink factors near 0.44-0.45) -- it is NOT a precisely
+    fitted correction. 30 trades, many clustered on a handful of
+    days/cities, isn't enough to reliably estimate an exact factor, and
+    one bucket (60-70% stated) was already well-calibrated on its own,
+    which argues against any single fixed factor being right everywhere.
+    Revisit this once there's a larger, more independent sample --
+    ideally replacing the hardcoded constant with a rolling calibration
+    fit against real settlement history.
+    """
+    return 0.5 + (win_prob - 0.5) * (1 - CALIBRATION_SHRINK)
+
+
 def kelly_fraction(win_prob, price):
     """
     Computes the full Kelly-optimal fraction of bankroll to stake on a

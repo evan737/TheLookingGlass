@@ -4,7 +4,7 @@ from kalshi import get_registered_markets
 from market_registry import MARKET_SERIES
 from claims_opportunity_engine import build_claims_opportunities, CLAIMS_SERIES_TICKER
 from paper_trader import log_paper_trade, has_open_paper_trade
-from position_sizing import position_size
+from position_sizing import position_size, calibrate_win_prob
 from bankroll import get_current_bankroll
 from risk_manager import check_can_trade
 
@@ -80,6 +80,7 @@ def main():
         # edge/confidence instead of always betting a flat $10.
         price = float(opp["yes_ask_dollars"]) if decision == "BUY YES" else (1 - float(opp["yes_bid_dollars"]))
         win_prob = (opp["model_prob_pct"] / 100) if decision == "BUY YES" else (1 - opp["model_prob_pct"] / 100)
+        win_prob = calibrate_win_prob(win_prob)
         stake = position_size(get_current_bankroll(), win_prob, price)
 
         if stake <= 0:

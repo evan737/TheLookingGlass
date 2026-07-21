@@ -5,7 +5,7 @@ from tennis_utils import normalize_player_name
 from tennis_elo import build_elo_ratings_from_files, get_elo_rating
 from tennis_futures_compare import fetch_polymarket_tournament_event
 from paper_trader import log_paper_trade, has_open_paper_trade
-from position_sizing import position_size
+from position_sizing import position_size, calibrate_win_prob
 from bankroll import get_current_bankroll
 from risk_manager import check_can_trade
 
@@ -200,6 +200,7 @@ def main():
         consensus_prob = poly_prob if is_heavy_favorite else (poly_prob + elo_prob) / 2
         price = float(market.get("yes_ask_dollars")) if decision == "BUY YES" else (1 - float(market.get("yes_bid_dollars")))
         win_prob = consensus_prob if decision == "BUY YES" else (1 - consensus_prob)
+        win_prob = calibrate_win_prob(win_prob)
         stake = position_size(get_current_bankroll(), win_prob, price)
 
         if stake <= 0:
