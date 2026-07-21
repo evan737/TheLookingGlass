@@ -16,19 +16,25 @@ EDGE_THRESHOLD_PCT = 10.0
 
 
 def decide(opp):
-    if opp["edge_pct"] >= EDGE_THRESHOLD_PCT:
+    # Calibrated edge, not raw -- see paper_trade_scan.py's decide() for
+    # why (the calibration check found the model overconfident, so this
+    # filters false edges at the decision stage, not just at sizing).
+    calibrated_model_prob_pct = calibrate_win_prob(opp["model_prob_pct"] / 100) * 100
+    calibrated_edge_pct = round(calibrated_model_prob_pct - opp["market_prob_pct"], 1)
+
+    if calibrated_edge_pct >= EDGE_THRESHOLD_PCT:
         return "BUY YES", (
             f"Model {opp['model_prob_pct']}% vs Market {opp['market_prob_pct']}%, "
-            f"edge +{opp['edge_pct']}% (FRED trend model, last actual "
+            f"edge +{opp['edge_pct']}% (calibrated +{calibrated_edge_pct}%) (FRED trend model, last actual "
             f"{opp['last_observed_value']}, forecast {opp['forecast_mean']})"
         )
-    if opp["edge_pct"] <= -EDGE_THRESHOLD_PCT:
+    if calibrated_edge_pct <= -EDGE_THRESHOLD_PCT:
         return "BUY NO", (
             f"Model {opp['model_prob_pct']}% vs Market {opp['market_prob_pct']}%, "
-            f"edge {opp['edge_pct']}% (FRED trend model, last actual "
+            f"edge {opp['edge_pct']}% (calibrated {calibrated_edge_pct}%) (FRED trend model, last actual "
             f"{opp['last_observed_value']}, forecast {opp['forecast_mean']})"
         )
-    return "SKIP", f"Edge too small ({opp['edge_pct']}%)"
+    return "SKIP", f"Edge too small after calibration ({calibrated_edge_pct}%, raw {opp['edge_pct']}%)"
 
 
 def main():

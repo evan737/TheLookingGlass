@@ -21,21 +21,25 @@ def decide(opp):
     if opp["confidence"] < CONFIDENCE_THRESHOLD_PCT:
         return "SKIP", f"Confidence too low ({opp['confidence']}%)"
 
-    if opp["edge_pct"] >= EDGE_THRESHOLD_PCT:
+    # Calibrated edge, not raw -- see paper_trade_scan.py's decide() for why.
+    calibrated_model_prob_pct = calibrate_win_prob(opp["sportsbook_prob_pct"] / 100) * 100
+    calibrated_edge_pct = round(calibrated_model_prob_pct - opp["market_prob_pct"], 1)
+
+    if calibrated_edge_pct >= EDGE_THRESHOLD_PCT:
         return "BUY YES", (
             f"Model {opp['sportsbook_prob_pct']}% vs Market {opp['market_prob_pct']}%, "
-            f"edge +{opp['edge_pct']}%, confidence {opp['confidence']}%, "
+            f"edge +{opp['edge_pct']}% (calibrated +{calibrated_edge_pct}%), confidence {opp['confidence']}%, "
             f"tier: {opp['tournament_tier']}"
         )
 
-    if opp["edge_pct"] <= -EDGE_THRESHOLD_PCT:
+    if calibrated_edge_pct <= -EDGE_THRESHOLD_PCT:
         return "BUY NO", (
             f"Model {opp['sportsbook_prob_pct']}% vs Market {opp['market_prob_pct']}%, "
-            f"edge {opp['edge_pct']}%, confidence {opp['confidence']}%, "
+            f"edge {opp['edge_pct']}% (calibrated {calibrated_edge_pct}%), confidence {opp['confidence']}%, "
             f"tier: {opp['tournament_tier']}"
         )
 
-    return "SKIP", f"Edge too small ({opp['edge_pct']}%)"
+    return "SKIP", f"Edge too small after calibration ({calibrated_edge_pct}%, raw {opp['edge_pct']}%)"
 
 
 def main():

@@ -102,8 +102,15 @@ def decide_with_corroboration(kalshi_prob, poly_prob, elo_prob):
     much smaller), require genuine 2-of-3 corroboration: Polymarket AND
     Elo must agree on the direction of disagreement with Kalshi.
     """
-    poly_edge = round((poly_prob - kalshi_prob) * 100, 4)
-    elo_edge = round((elo_prob - kalshi_prob) * 100, 4)
+    # Shrink each independent probability toward 50% before computing its
+    # edge against Kalshi -- same correction as the other scanners, so a
+    # "corroborated" edge here isn't just two overconfident sources
+    # agreeing with each other.
+    calibrated_poly_prob = calibrate_win_prob(poly_prob)
+    calibrated_elo_prob = calibrate_win_prob(elo_prob)
+
+    poly_edge = round((calibrated_poly_prob - kalshi_prob) * 100, 4)
+    elo_edge = round((calibrated_elo_prob - kalshi_prob) * 100, 4)
 
     if kalshi_prob * 100 >= HEAVY_FAVORITE_THRESHOLD_PCT:
         if poly_edge >= EDGE_THRESHOLD_PCT:

@@ -21,19 +21,29 @@ def decide(opp):
     if opp["confidence"] < CONFIDENCE_THRESHOLD_PCT:
         return "SKIP", f"Confidence too low ({opp['confidence']}%)"
 
-    if opp["edge_pct"] >= EDGE_THRESHOLD_PCT:
+    # The buy/skip threshold now runs on the *calibrated* edge, not the
+    # raw one -- the calibration check found the model overconfident, so
+    # some of what looks like a real edge here is really just that same
+    # overconfidence showing up before Kelly sizing even gets involved.
+    # Shrinking model_prob_pct toward 50% first (same correction already
+    # applied to Kelly's win_prob) filters those out at the decision
+    # stage instead of just betting smaller on them.
+    calibrated_model_prob_pct = calibrate_win_prob(opp["model_prob_pct"] / 100) * 100
+    calibrated_edge_pct = round(calibrated_model_prob_pct - opp["market_prob_pct"], 1)
+
+    if calibrated_edge_pct >= EDGE_THRESHOLD_PCT:
         return "BUY YES", (
             f"Model {opp['model_prob_pct']}% vs Market {opp['market_prob_pct']}%, "
-            f"edge +{opp['edge_pct']}%, confidence {opp['confidence']}%"
+            f"edge +{opp['edge_pct']}% (calibrated +{calibrated_edge_pct}%), confidence {opp['confidence']}%"
         )
 
-    if opp["edge_pct"] <= -EDGE_THRESHOLD_PCT:
+    if calibrated_edge_pct <= -EDGE_THRESHOLD_PCT:
         return "BUY NO", (
             f"Model {opp['model_prob_pct']}% vs Market {opp['market_prob_pct']}%, "
-            f"edge {opp['edge_pct']}%, confidence {opp['confidence']}%"
+            f"edge {opp['edge_pct']}% (calibrated {calibrated_edge_pct}%), confidence {opp['confidence']}%"
         )
 
-    return "SKIP", f"Edge too small ({opp['edge_pct']}%)"
+    return "SKIP", f"Edge too small after calibration ({calibrated_edge_pct}%, raw {opp['edge_pct']}%)"
 
 
 def main():
